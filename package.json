@@ -1,0 +1,16 @@
+{
+  "name": "b52-logic-predict-api",
+  "version": "1.0.0",
+  "description": "API Phân Tích Đối Xứng Tĩnh B52 Không Random",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "express": "^4.19.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
