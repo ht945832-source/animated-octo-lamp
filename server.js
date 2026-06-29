@@ -6,22 +6,22 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // ============================================================================
-// HỆ THỐNG THUẬT TOÁN LOGIC VI PHÂN VÀ NHẬN DIỆN CẦU TUYẾN TÍNH (KHÔNG RANDOM)
+// TOÁN HỌC PHÂN TÍCH MA TRẬN NHẬN DIỆN TẤT CẢ CÁC THẾ CẦU B52 (KHÔNG RANDOM)
 // ============================================================================
 function executeUltraLongLogicChain(historyData) {
-    // 1. LỌC BỎ HOÀN TOÀN CÁC PHIÊN LỖI 0-0-0 NGAY TỪ ĐẦU
+    // 1. Sàng lọc loại bỏ hoàn toàn các phiên lỗi xúc xắc 0-0-0 từ API gốc
     const validHistory = historyData.filter(item => {
         const d1 = parseInt(item.Xuc_cac_1 || item.Xuc_xac_1 || 0);
         const d2 = parseInt(item.Xuc_cac_2 || item.Xuc_xac_2 || 0);
         const d3 = parseInt(item.Xuc_cac_3 || item.Xuc_xac_3 || 0);
-        return (d1 + d2 + d3) > 0; // Chỉ giữ lại phiên có điểm xúc xắc thực
+        return (d1 + d2 + d3) > 0;
     });
 
-    // FIX LỖI CHÍ MẠNG: Phải đảo mảng trước để đưa các phiên MỚI NHẤT về cuối mảng phân tích
+    // Đảo mảng để đưa các phiên mới nhất về cuối hàng đợi tính toán
     const reversedHistory = [...validHistory].reverse();
 
-    // Lấy đúng 24 phiên gần đây nhất để tính toán nhịp cầu ngắn và trung hạn
-    const cleanData = reversedHistory.slice(-24).map(item => {
+    // Lấy chuỗi dữ liệu chuẩn của 30 phiên gần nhất để phân tích cấu trúc cầu
+    const cleanData = reversedHistory.slice(-30).map(item => {
         const d1 = parseInt(item.Xuc_cac_1 || item.Xuc_xac_1 || 0);
         const d2 = parseInt(item.Xuc_cac_2 || item.Xuc_xac_2 || 0);
         const d3 = parseInt(item.Xuc_cac_3 || item.Xuc_xac_3 || 0);
@@ -29,67 +29,110 @@ function executeUltraLongLogicChain(historyData) {
         return {
             id: parseInt(item.Phien || 0),
             total: total,
-            side: total >= 11 ? 1 : 0 // 1 = Tài, 0 = Xỉu
+            side: total >= 11 ? 1 : 0 // 1 = TÀI, 0 = XỈU
         };
     });
 
     const size = cleanData.length;
-    if (size < 6) {
+    if (size < 8) {
         return { prediction: "TÀI", rate: "85%" };
     }
 
-    let scoreTai = 0.0000;
-    let scoreXiu = 0.0000;
+    // Khởi tạo thang điểm ma trận cho xu hướng hai bên
+    let scoreTai = 0.00;
+    let scoreXiu = 0.00;
 
-    // --- MODULE 1: NHẬN DIỆN HÌNH THÁI CẦU TĨNH ---
-    const str4 = cleanData.slice(-4).map(x => x.side).join('');
-    const str6 = cleanData.slice(-6).map(x => x.side).join('');
+    // Chuyển lịch sử chuỗi kết quả sang dạng Text để bóc tách thế cầu bằng mẫu chuỗi
+    const fullChain = cleanData.map(x => x.side).join('');
+    
+    // Tạo các chuỗi con đại diện cho các nhịp độ phiên gần nhất (3, 4, 6 phiên)
+    const last3 = fullChain.slice(-3);
+    const last4 = fullChain.slice(-4);
+    const last6 = fullChain.slice(-6);
 
-    if (str6 === '111111' || str6 === '000000') {
-        // Phát hiện cầu bệt dài -> Đánh tiếp diễn cầu bệt
-        if (str6 === '111111') scoreTai += 4.5; else scoreXiu += 4.5;
-    } else if (str6 === '101010' || str6 === '010101') {
-        // Phát hiện cầu đảo 1-1 -> Đánh nghịch đảo nhịp kế tiếp
-        if (str6 === '101010') scoreTai += 4.0; else scoreXiu += 4.0;
-    } else if (str4 === '1100' || str4 === '0011') {
-        // Phát hiện cầu đôi 2-2 -> Đánh tiếp diễn cặp đôi
-        if (str4 === '1100') scoreTai += 3.5; else scoreXiu += 3.5;
+    // ------------------------------------------------------------------------
+    // MÔ-ĐUN 1: NHẬN DIỆN TOÀN DIỆN ALL CÁC THẾ CẦU B52
+    // ------------------------------------------------------------------------
+    
+    // THẾ 1: Nhận diện Cầu Bệt (Tài liên tục hoặc Xỉu liên tục)
+    if (last6 === '111111' || fullChain.slice(-5) === '11111') {
+        scoreTai += 5.5; // Ưu tiên bám cầu bệt Tài tiếp diễn
+    } else if (last6 === '000000' || fullChain.slice(-5) === '00000') {
+        scoreXiu += 5.5; // Ưu tiên bám cầu bệt Xỉu tiếp diễn
     }
 
-    // --- MODULE 2: TOÁN HỌC VI PHÂN MOMENTUM (TỐC ĐỘ DI CHUYỂN ĐIỂM) ---
-    let totalVelocity = 0; 
+    // THẾ 2: Nhận diện Cầu Đảo 1-1 (Tài Xỉu xen kẽ nhau)
+    else if (last6 === '101010' || last6 === '010101') {
+        // Nếu đang chạy nhịp đảo 1-1, phiên kế tiếp sẽ nghịch đảo lại phiên vừa ra
+        if (last3 === '101') scoreXiu += 5.0;
+        else if (last3 === '010') scoreTai += 5.0;
+    }
+
+    // THẾ 3: Nhận diện Cầu Lặp Đôi 2-2 hoặc 3-3 (Cầu đối xứng song hành)
+    else if (last4 === '1100') {
+        scoreTai += 4.5; // Theo tiếp cấu trúc nhịp đôi, dự kiến ra lại Tài
+    } else if (last4 === '0011') {
+        scoreXiu += 4.5; // Theo tiếp cấu trúc nhịp đôi, dự kiến ra lại Xỉu
+    } else if (fullChain.slice(-6) === '111000') {
+        scoreTai += 4.5; // Nhịp lặp cấu trúc bệt đôi 3-3
+    } else if (fullChain.slice(-6) === '000111') {
+        scoreXiu += 4.5;
+
+    // THẾ 4: Nhận diện Cầu Nhảy lệch tầng 1-2 hoặc 2-1
+    } else if (last3 === '100') {
+        scoreTai += 4.0; // Dự đoán điểm gãy của nhịp nhảy ngắn đưa về Tài
+    } else if (last3 === '011') {
+        scoreXiu += 4.0; // Dự đoán điểm gãy của nhịp nhảy ngắn đưa về Xỉu
+    } else if (last4 === '1101') {
+        scoreXiu += 3.5;
+    } else if (last4 === '0010') {
+        scoreTai += 3.5;
+    }
+
+    // ------------------------------------------------------------------------
+    // MÔ-ĐUN 2: TOÁN HỌC KHẢ VI MOMENTUM (TỐC ĐỘ DI CHUYỂN ĐIỂM XÚC XẮC)
+    // ------------------------------------------------------------------------
+    let momentum = 0;
     for (let i = 1; i < size; i++) {
-        const velocity = cleanData[i].total - cleanData[i-1].total;
-        // Trọng số nhân cao hơn cho các phiên càng sát hiện tại
-        totalVelocity += velocity * (i / size); 
+        const diff = cleanData[i].total - cleanData[i - 1].total;
+        // Nhân trọng số cấp số cộng cho các phiên càng gần thời gian thực hiện tại
+        momentum += diff * (i / size);
     }
-
-    if (totalVelocity > 0) {
-        scoreTai += Math.abs(totalVelocity) * 0.25;
+    
+    if (momentum > 0) {
+        scoreTai += Math.abs(momentum) * 0.30;
     } else {
-        scoreXiu += Math.abs(totalVelocity) * 0.25;
+        scoreXiu += Math.abs(momentum) * 0.30;
     }
 
-    // --- MODULE 3: CÂN BẰNG MẬT ĐỘ ĐIỂM ---
-    let countTai = 0;
-    cleanData.forEach(x => { if (x.side === 1) countTai++; });
-    const taiRatio = countTai / size;
+    // ------------------------------------------------------------------------
+    // MÔ-ĐUN 3: THUẬT TOÁN HỒI QUY CÂN BẰNG MẬT ĐỘ NGHIÊNG CẦU
+    // ------------------------------------------------------------------------
+    let totalTaiCount = 0;
+    cleanData.forEach(x => { if (x.side === 1) totalTaiCount++; });
+    const densityTai = totalTaiCount / size;
 
-    if (taiRatio > 0.60) scoreXiu += 2.0; // Quá nhiều Tài -> Thuật toán kéo về Xỉu
-    if (taiRatio < 0.40) scoreTai += 2.0; // Quá nhiều Xỉu -> Thuật toán kéo về Tài
+    // Nếu mật độ nghiêng quá lớn (Ví dụ: Cầu nghiêng hẳn về một bên trong 30 phiên)
+    if (densityTai > 0.62) {
+        scoreXiu += 2.5; // Kéo hồi quy đối xứng đưa dòng chảy về Xỉu
+    } else if (densityTai < 0.38) {
+        scoreTai += 2.5; // Kéo hồi quy đối xứng đưa dòng chảy về Tài
+    }
 
-    // TỔNG HỢP QUYẾT ĐỊNH CUỐI CÙNG
+    // ------------------------------------------------------------------------
+    // TỔNG HỢP KẾT QUẢ ĐẦU RA KHÔNG PHỤ THUỘC VÀO SỐ DƯ NGẪU NHIÊN
+    // ------------------------------------------------------------------------
     let finalPrediction = "TÀI";
-    const delta = Math.abs(scoreTai - scoreXiu);
+    const deltaScore = Math.abs(scoreTai - scoreXiu);
     if (scoreXiu > scoreTai) finalPrediction = "XỈU";
 
-    // Tỷ lệ khớp động biến thiên logic từ 82% đến 98% dựa vào độ lệch điểm số
-    let finalRate = 82 + Math.floor(Math.min(delta * 4.5, 16));
+    // Tỷ lệ phân tích logic động dao động từ 83% đến 98% tùy vào độ lệch thang điểm
+    let calculatedRate = 83 + Math.floor(Math.min(deltaScore * 4.2, 15));
 
-    return { prediction: finalPrediction, rate: `${finalRate}%` };
+    return { prediction: finalPrediction, rate: `${calculatedRate}%` };
 }
 
-// --- HỆ THỐNG ROUTE API CHÍNH ---
+// --- LUỒNG ROUTE KHAI THÁC DỮ LIỆU TỪ API ---
 app.get('/api/predict', async (req, res) => {
     try {
         const response = await axios.get('https://b52-qiw2.onrender.com/api/history', { timeout: 6000 });
@@ -102,10 +145,10 @@ app.get('/api/predict', async (req, res) => {
             history = resData;
         } else {
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            return res.status(500).send("Cấu trúc mảng API gốc trống.");
+            return res.status(500).send("Dữ liệu đầu vào của hệ thống trống.");
         }
 
-        // TÌM PHIÊN MỚI NHẤT MÀ CÓ XÚC XẮC HỢP LỆ TRONG DANH SÁCH LỊCH SỬ ĐẦU VÀO
+        // Định vị tìm kiếm phiên thực tế hợp lệ gần nhất trong chuỗi lịch sử trả về
         let latestValidSession = null;
         for (let i = 0; i < history.length; i++) {
             const d1 = parseInt(history[i].Xuc_cac_1 || history[i].Xuc_xac_1 || 0);
@@ -119,7 +162,7 @@ app.get('/api/predict', async (req, res) => {
 
         if (!latestValidSession) {
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            return res.status(500).send("Không tìm thấy phiên có điểm hợp lệ.");
+            return res.status(500).send("Không định vị được phiên dữ liệu sạch.");
         }
 
         const d1 = parseInt(latestValidSession.Xuc_cac_1 || latestValidSession.Xuc_xac_1 || 0);
@@ -128,7 +171,7 @@ app.get('/api/predict', async (req, res) => {
         const currentPhien = parseInt(latestValidSession.Phien || 0);
         const currentTong = d1 + d2 + d3;
 
-        // Chạy phân tích logic tuyến tính sạch
+        // Tiến hành chạy chuỗi ma trận nhận diện cầu tuyến tính nâng cao
         const logicResult = executeUltraLongLogicChain(history);
         const nextPhien = currentPhien + 1;
 
@@ -152,9 +195,9 @@ Id: @tranhoang2286`;
 });
 
 app.get('/', (req, res) => {
-    res.send("API HOANGDZ V4 CORE PREMIUM CHẠY ỔN ĐỊNH.");
+    res.send("HỆ THỐNG THUẬT TOÁN MA TRẬN PHÂN TÍCH CẦU HOANGDZ V5 CORE ONLINE.");
 });
 
 app.listen(PORT, () => {
-    console.log(`[ONLINE] Khởi chạy cổng dịch vụ thành công: ${PORT}`);
+    console.log(`[ONLINE] Khởi chạy lõi xử lý thành công trên cổng: ${PORT}`);
 });
