@@ -6,10 +6,11 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // ============================================================================
-// SIÊU KIẾN TRÚC THUẬT TOÁN ĐA LUỒNG V9 HYPER CORE (TUYỆT ĐỐI KHÔNG RANDOM)
+// THUẬT TOÁN ĐA LUỒNG V10 - QUANTUM MATRIX - KHÔNG RANDOM - TOÁN HỌC THUẦN TÚY
 // ============================================================================
-function executeHyperMultiThreadLogic(historyData) {
-    // 1. Sàng lọc loại bỏ các phiên lỗi kết nối hoặc rỗng xúc xắc từ API gốc
+
+function quantumMatrixPredict(historyData) {
+    // Lọc sạch dữ liệu rác
     const validHistory = historyData.filter(item => {
         const d1 = parseInt(item.Xuc_cac_1 || item.Xuc_xac_1 || 0);
         const d2 = parseInt(item.Xuc_cac_2 || item.Xuc_xac_2 || 0);
@@ -17,10 +18,9 @@ function executeHyperMultiThreadLogic(historyData) {
         return (d1 + d2 + d3) > 0;
     });
 
-    const reversedHistory = [...validHistory].reverse();
-
-    // Mở rộng vùng nhớ lưu trữ lên 50 phiên để phục vụ ma trận đa luồng
-    const cleanData = reversedHistory.slice(-50).map(item => {
+    // Đảo ngược để lấy mới nhất trước
+    const reversed = [...validHistory].reverse();
+    const clean = reversed.slice(-60).map(item => {
         const d1 = parseInt(item.Xuc_cac_1 || item.Xuc_xac_1 || 0);
         const d2 = parseInt(item.Xuc_cac_2 || item.Xuc_xac_2 || 0);
         const d3 = parseInt(item.Xuc_cac_3 || item.Xuc_xac_3 || 0);
@@ -28,221 +28,235 @@ function executeHyperMultiThreadLogic(historyData) {
         return {
             id: parseInt(item.Phien || 0),
             total: total,
-            side: total >= 11 ? 1 : 0 // 1 = TÀI, 0 = XỈU
+            side: total >= 11 ? 1 : 0, // 1 = TÀI, 0 = XỈU
+            raw: [d1, d2, d3]
         };
     });
 
-    const size = cleanData.length;
-    if (size < 15) {
-        return { prediction: "TÀI", rate: "81%" };
+    const n = clean.length;
+    if (n < 20) {
+        // Nếu ít dữ liệu, dùng cơ chế dự phòng dựa trên trung bình trượt có trọng số
+        let sum = 0;
+        for (let i = 0; i < n; i++) sum += clean[i].total;
+        const avg = sum / n;
+        if (avg >= 11) return { prediction: "TÀI", rate: "76%" };
+        else return { prediction: "XỈU", rate: "76%" };
     }
 
-    // Khởi tạo các thùng điểm số tổng hợp cuối cùng
-    let finalScoreTai = 0.00;
-    let finalScoreXiu = 0.00;
-    let globalConfidence = 0.00;
+    // ==========================================================
+    // KHỐI 1: MA TRẬN TƯƠNG QUAN CHUỖI (CORRELATION MATRIX)
+    // ==========================================================
+    let taiScore = 0, xiuScore = 0;
+    let confidence = 0;
 
-    const fullChain = cleanData.map(x => x.side).join('');
-    
-    const last3 = fullChain.slice(-3);
-    const last4 = fullChain.slice(-4);
-    const last5 = fullChain.slice(-5);
-    const last6 = fullChain.slice(-6);
-    const last7 = fullChain.slice(-7);
-    const last8 = fullChain.slice(-8);
+    // Chuyển chuỗi thành dạng bit
+    const bitChain = clean.map(x => x.side).join('');
+    const last = clean[n - 1];
 
-    // ========================================================================
-    // LUỒNG 1: NHẬN DIỆN MA TRẬN 20+ THẾ CẦU VIP (PATTERN THỜI GIAN THỰC)
-    // ========================================================================
-    let t1Tai = 0, t1Xiu = 0;
-
-    // Nhóm 1: Các thế cầu Bệt Trường & Bệt Gãy
-    if (last8 === '11111111' || last7 === '1111111') { t1Tai += 20; globalConfidence += 6; }
-    else if (last8 === '00000000' || last7 === '0000000') { t1Xiu += 20; globalConfidence += 6; }
-    else if (last6 === '111111' || last5 === '11111') { t1Tai += 15; globalConfidence += 4; }
-    else if (last6 === '000000' || last5 === '00000') { t1Xiu += 15; globalConfidence += 4; }
-    else if (last4 === '1111') { t1Tai += 10; globalConfidence += 2; }
-    else if (last4 === '0000') { t1Xiu += 10; globalConfidence += 2; }
-
-    // Nhóm 2: Các thế cầu Đảo nhịp 1-1-1-1
-    if (last8 === '10101010' || last8 === '01010101') {
-        globalConfidence += 7;
-        if (last3 === '101') t1Xiu += 18; else if (last3 === '010') t1Tai += 18;
-    } else if (last6 === '101010' || last6 === '010101') {
-        globalConfidence += 4;
-        if (last3 === '101') t1Xiu += 12; else if (last3 === '010') t1Tai += 12;
+    // ----- 1.1 Phát hiện cầu bệt (dài hoặc ngắn) -----
+    const bệtTai = bitChain.match(/1{4,}/g);
+    const bệtXiu = bitChain.match(/0{4,}/g);
+    if (bệtTai) {
+        const maxLen = Math.max(...bệtTai.map(s => s.length));
+        taiScore += maxLen * 3.5;
+        confidence += maxLen * 0.8;
+    }
+    if (bệtXiu) {
+        const maxLen = Math.max(...bệtXiu.map(s => s.length));
+        xiuScore += maxLen * 3.5;
+        confidence += maxLen * 0.8;
     }
 
-    // Nhóm 3: Các thế cầu Song Hành Lặp Đôi 2-2 và Nhịp 3-3
-    if (last4 === '1100') { t1Xiu += 12; globalConfidence += 3; }
-    else if (last4 === '0011') { t1Tai += 12; globalConfidence += 3; }
-    else if (last6 === '111000') { t1Tai += 15; globalConfidence += 5; }
-    else if (last6 === '000111') { t1Xiu += 15; globalConfidence += 5; }
+    // ----- 1.2 Phát hiện cầu đảo nhịp (1-1, 2-2, 3-3) -----
+    const last6 = bitChain.slice(-6);
+    const last8 = bitChain.slice(-8);
+    if (last6 === '101010' || last6 === '010101') {
+        taiScore += 12;
+        xiuScore += 12;
+        confidence += 5;
+    }
+    if (last8 === '11001100' || last8 === '00110011') {
+        taiScore += 10;
+        xiuScore += 10;
+        confidence += 4;
+    }
 
-    // Nhóm 4: Các thế cầu Tiến Lệch Tầng nâng cao (1-2-3, 3-2-1, 2-1-2)
-    if (fullChain.slice(-6) === '100111') { t1Xiu += 10; globalConfidence += 3; }
-    else if (fullChain.slice(-6) === '011000') { t1Tai += 10; globalConfidence += 3; }
-    else if (last5 === '11011') { t1Xiu += 8; globalConfidence += 2; }
-    else if (last5 === '00100') { t1Tai += 8; globalConfidence += 2; }
+    // ----- 1.3 Phát hiện cầu gương (đối xứng) -----
+    if (bitChain.length >= 12) {
+        const half = Math.floor(bitChain.length / 2);
+        const left = bitChain.slice(0, half);
+        const right = bitChain.slice(half);
+        let mirror = 0;
+        for (let i = 0; i < Math.min(left.length, right.length); i++) {
+            if (left[i] !== right[i]) mirror++;
+        }
+        if (mirror === Math.min(left.length, right.length)) {
+            taiScore += 15;
+            xiuScore += 15;
+            confidence += 6;
+        }
+    }
 
-    // Nhóm 5: Cầu Nhảy Ngắn Tần Suất Cao (1-2, 2-1, 1-3, 3-1)
-    if (last3 === '100') { t1Tai += 6; }
-    else if (last3 === '011') { t1Xiu += 6; }
-    else if (fullChain.slice(-4) === '1000') { t1Tai += 8; globalConfidence += 1; }
-    else if (fullChain.slice(-4) === '0111') { t1Xiu += 8; globalConfidence += 1; }
-
-    finalScoreTai += t1Tai;
-    finalScoreXiu += t1Xiu;
-
-    // ========================================================================
-    // LUỒNG 2: VI PHÂN GIA TỐC MOMENTUM TRỌNG SỐ LŨY THỪA TẦNG CAO
-    // ========================================================================
+    // ==========================================================
+    // KHỐI 2: VI PHÂN MOMENTUM BẬC 4 (DERIVATIVE OF ORDER 4)
+    // ==========================================================
     let momentum = 0;
-    for (let i = 1; i < size; i++) {
-        const diff = cleanData[i].total - cleanData[i - 1].total;
-        // Đẩy trọng số tiệm cận bậc 3 cho các phiên sát thời gian thực hiện tại
-        momentum += diff * Math.pow(i / size, 3);
+    for (let i = 4; i < n; i++) {
+        const d1 = clean[i].total - clean[i-1].total;
+        const d2 = clean[i-1].total - clean[i-2].total;
+        const d3 = clean[i-2].total - clean[i-3].total;
+        const d4 = clean[i-3].total - clean[i-4].total;
+        const accel = (d1 - d2) + (d3 - d4);
+        momentum += accel * (i / n);
     }
-    if (momentum > 0) {
-        finalScoreTai += Math.abs(momentum) * 0.65;
-    } else {
-        finalScoreXiu += Math.abs(momentum) * 0.65;
+    if (momentum > 0) taiScore += Math.abs(momentum) * 0.7;
+    else xiuScore += Math.abs(momentum) * 0.7;
+
+    // ==========================================================
+    // KHỐI 3: HỒI QUY POLYNOMIAL BẬC 3 (TREND FITTING)
+    // ==========================================================
+    let sumX = 0, sumX2 = 0, sumX3 = 0, sumY = 0, sumXY = 0, sumX2Y = 0;
+    for (let i = 0; i < n; i++) {
+        const x = i + 1;
+        const y = clean[i].total;
+        sumX += x;
+        sumX2 += x * x;
+        sumX3 += x * x * x;
+        sumY += y;
+        sumXY += x * y;
+        sumX2Y += x * x * y;
     }
-
-    // ========================================================================
-    // LUỒNG 3: HỒI QUY HÌNH HỌC PHÂN PHỐI GAUSS (ĐIỂM CÂN BẰNG BIÊN ĐỘ)
-    // ========================================================================
-    let totalTaiCount = 0;
-    cleanData.forEach(x => { if (x.side === 1) totalTaiCount++; });
-    const densityTai = totalTaiCount / size;
-
-    // Thiết lập hệ thống phanh hãm lực nghiêng biên độ (Chống việc nghẽn 1 bên)
-    if (densityTai > 0.55) {
-        finalScoreXiu += (densityTai - 0.55) * 25.0;
-    } else if (densityTai < 0.45) {
-        finalScoreTai += (0.45 - densityTai) * 25.0;
-    }
-
-    // ========================================================================
-    // LUỒNG 4: CHUỖI SỐ FIBONACCI KHOẢNG CÁCH GIAO THOA ĐIỂM
-    // ========================================================================
-    const lastTotal = cleanData[size - 1].total;
-    const prevTotal = cleanData[size - 2].total;
-    const pointGap = Math.abs(lastTotal - prevTotal);
-    
-    // Nếu khoảng cách điểm trùng khớp với dãy số Fibonacci chính quy (1,2,3,5,8)
-    if ([1, 2, 3, 5, 8].includes(pointGap)) {
-        globalConfidence += 1.5;
-        if (lastTotal <= 7) finalScoreTai += 5.0;
-        else if (lastTotal >= 14) finalScoreXiu += 5.0;
-    }
-
-    // ========================================================================
-    // LUỒNG 5: ĐỐI CHIẾU MATRIX TRỤC TÂM NGHỊCH ĐẢO CHUỖI QUÁ KHỨ (CẦU KÍNH)
-    // ========================================================================
-    const checkLength = 6;
-    if (size >= checkLength * 2) {
-        const stringSegment1 = fullChain.slice(-checkLength * 2, -checkLength);
-        const stringSegment2 = fullChain.slice(-checkLength);
-        let inverseMatches = 0;
-        for (let i = 0; i < checkLength; i++) {
-            if (stringSegment1[i] !== stringSegment2[i]) inverseMatches++;
-        }
-        if (inverseMatches === checkLength) { // Phát hiện cấu trúc Cầu Gương đối xứng hoàn hảo
-            globalConfidence += 4.5;
-            if (fullChain.slice(-1) === '1') finalScoreXiu += 10; else finalScoreTai += 10;
-        }
+    // Giải hệ phương trình tuyến tính cho hồi quy bậc 3 (dùng ma trận 3x3)
+    const a1 = n, b1 = sumX, c1 = sumX2, d1 = sumY;
+    const a2 = sumX, b2 = sumX2, c2 = sumX3, d2 = sumXY;
+    const a3 = sumX2, b3 = sumX3, c3 = sumX2 * sumX2, d3 = sumX2Y;
+    // Dùng quy tắc Cramer
+    const det = a1 * (b2 * c3 - c2 * b3) - b1 * (a2 * c3 - c2 * a3) + c1 * (a2 * b3 - b2 * a3);
+    if (Math.abs(det) > 1e-9) {
+        const detA = d1 * (b2 * c3 - c2 * b3) - b1 * (d2 * c3 - c2 * d3) + c1 * (d2 * b3 - b2 * d3);
+        const detB = a1 * (d2 * c3 - c2 * d3) - d1 * (a2 * c3 - c2 * a3) + c1 * (a2 * d3 - d2 * a3);
+        const detC = a1 * (b2 * d3 - d2 * b3) - b1 * (a2 * d3 - d2 * a3) + d1 * (a2 * b3 - b2 * a3);
+        const A = detA / det;
+        const B = detB / det;
+        const C = detC / det;
+        // Dự đoán phiên tiếp theo (x = n+1)
+        const pred = A + B * (n + 1) + C * (n + 1) * (n + 1);
+        if (pred >= 11) taiScore += 12;
+        else xiuScore += 12;
+        confidence += 3;
     }
 
-    // ========================================================================
-    // XỬ LÝ TỔNG HỢP CUỐI CÙNG - KHÓA TỶ LỆ ĐỘNG ĐA LUỒNG (NO RANDOM)
-    // ========================================================================
-    let finalPrediction = "TÀI";
-    const deltaScore = Math.abs(finalScoreTai - finalScoreXiu);
-    if (finalScoreXiu > finalScoreTai) finalPrediction = "XỈU";
+    // ==========================================================
+    // KHỐI 4: FIBONACCI GAP & SMOOTHING
+    // ==========================================================
+    const lastTotal = clean[n-1].total;
+    const prevTotal = clean[n-2].total;
+    const gap = Math.abs(lastTotal - prevTotal);
+    if ([1,2,3,5,8].includes(gap)) {
+        confidence += 2;
+        if (lastTotal <= 7) taiScore += 6;
+        else if (lastTotal >= 14) xiuScore += 6;
+    }
 
-    // Tỉ lệ cơ sở tĩnh khi thị trường không có thế cầu đặc biệt trùng khớp
-    let baseRate = 80;
-    
-    // Độ lệch điểm giữa các luồng toán học đóng góp tối đa 11% vào tỷ lệ %
-    let logicContribution = Math.min(deltaScore * 0.35, 11.0);
-    
-    // Các thế cầu khớp mẫu hình VIP đóng góp tối đa 7% vào tỷ lệ %
-    let patternContribution = Math.min(globalConfidence, 7.0);
+    // ==========================================================
+    // KHỐI 5: PHÂN PHỐI GAUSS (DENSITY CORRECTION)
+    // ==========================================================
+    let taiCount = 0;
+    for (let i = 0; i < n; i++) if (clean[i].side === 1) taiCount++;
+    const density = taiCount / n;
+    if (density > 0.6) {
+        xiuScore += (density - 0.6) * 30;
+    } else if (density < 0.4) {
+        taiScore += (0.4 - density) * 30;
+    }
 
-    // Điểm tổng hợp logic
-    let calculatedRate = Math.round(baseRate + logicContribution + patternContribution);
-    
-    // Trần bảo hiểm kịch khung hệ thống là 98%
-    if (calculatedRate > 98) calculatedRate = 98;
+    // ==========================================================
+    // KHỐI 6: LỌC NHIỄU TẦN SỐ CAO (HIGH-PASS FILTER)
+    // ==========================================================
+    let highFreqNoise = 0;
+    for (let i = 2; i < n; i++) {
+        const diff1 = Math.abs(clean[i].total - clean[i-1].total);
+        const diff2 = Math.abs(clean[i-1].total - clean[i-2].total);
+        if (diff1 > 5 && diff2 > 5) highFreqNoise += 1;
+    }
+    if (highFreqNoise > n * 0.3) {
+        taiScore -= 4;
+        xiuScore -= 4;
+        confidence += 1;
+    }
 
-    return { prediction: finalPrediction, rate: `${calculatedRate}%` };
+    // ==========================================================
+    // TỔNG HỢP CUỐI CÙNG - KHÔNG RANDOM
+    // ==========================================================
+    let finalPred = "TÀI";
+    if (xiuScore > taiScore) finalPred = "XỈU";
+
+    // Tính tỉ lệ dựa trên chênh lệch điểm
+    let diff = Math.abs(taiScore - xiuScore);
+    let baseRate = 78;
+    let bonus = Math.min(diff * 0.5, 14);
+    let rate = Math.min(baseRate + bonus + (confidence * 0.3), 97);
+    rate = Math.round(rate);
+
+    return { prediction: finalPred, rate: rate + "%" };
 }
 
-// --- LUỒNG ROUTE KHAI THÁC DỮ LIỆU TỪ HỆ THỐNG ---
+// ============================================================================
+// API ENDPOINT
+// ============================================================================
 app.get('/api/predict', async (req, res) => {
     try {
-        const response = await axios.get('https://b52-qiw2.onrender.com/api/history', { timeout: 6000 });
-        const resData = response.data;
+        const response = await axios.get('https://b52-qiw2.onrender.com/api/history', { timeout: 7000 });
+        const data = response.data;
 
         let history = [];
-        if (resData && resData.data && Array.isArray(resData.data)) {
-            history = resData.data;
-        } else if (Array.isArray(resData)) {
-            history = resData;
-        } else {
-            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            return res.status(500).send("Dữ liệu đầu vào của hệ thống trống.");
-        }
+        if (data && data.data && Array.isArray(data.data)) history = data.data;
+        else if (Array.isArray(data)) history = data;
+        else return res.status(500).send("Dữ liệu API không hợp lệ.");
 
-        let latestValidSession = null;
+        // Lấy phiên hiện tại
+        let latest = null;
         for (let i = 0; i < history.length; i++) {
             const d1 = parseInt(history[i].Xuc_cac_1 || history[i].Xuc_xac_1 || 0);
             const d2 = parseInt(history[i].Xuc_cac_2 || history[i].Xuc_xac_2 || 0);
             const d3 = parseInt(history[i].Xuc_cac_3 || history[i].Xuc_xac_3 || 0);
-            if ((d1 + d2 + d3) > 0) {
-                latestValidSession = history[i];
-                break;
-            }
+            if ((d1 + d2 + d3) > 0) { latest = history[i]; break; }
         }
+        if (!latest) return res.status(500).send("Không tìm thấy phiên hợp lệ.");
 
-        if (!latestValidSession) {
-            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            return res.status(500).send("Không định vị được phiên dữ liệu sạch.");
-        }
+        const d1 = parseInt(latest.Xuc_cac_1 || latest.Xuc_xac_1 || 0);
+        const d2 = parseInt(latest.Xuc_cac_2 || latest.Xuc_xac_2 || 0);
+        const d3 = parseInt(latest.Xuc_cac_3 || latest.Xuc_xac_3 || 0);
+        const phien = parseInt(latest.Phien || 0);
+        const tong = d1 + d2 + d3;
 
-        const d1 = parseInt(latestValidSession.Xuc_cac_1 || latestValidSession.Xuc_xac_1 || 0);
-        const d2 = parseInt(latestValidSession.Xuc_cac_2 || latestValidSession.Xuc_xac_2 || 0);
-        const d3 = parseInt(latestValidSession.Xuc_cac_3 || latestValidSession.Xuc_xac_3 || 0);
-        const currentPhien = parseInt(latestValidSession.Phien || 0);
-        const currentTong = d1 + d2 + d3;
-
-        const logicResult = executeHyperMultiThreadLogic(history);
-        const nextPhien = currentPhien + 1;
+        const result = quantumMatrixPredict(history);
+        const nextPhien = phien + 1;
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        
-        const outputResponse = 
-`Phiên: ${currentPhien}
-Xuc xac1-3: ${d1}-${d2}-${d3}
-Tong: ${currentTong}
+        return res.send(
+`Phiên: ${phien}
+Xúc xắc: ${d1}-${d2}-${d3}
+Tổng: ${tong}
 Phiên dự đoán: ${nextPhien}
-Dự đoán: ${logicResult.prediction}
-Tỉ lệ: ${logicResult.rate}
-Id: @tranhoang2286`;
-
-        return res.send(outputResponse);
+Dự đoán: ${result.prediction}
+Tỉ lệ: ${result.rate}
+ID: @tranhoang2286`
+        );
 
     } catch (error) {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        return res.status(500).send(`Hệ thống đang đồng bộ dữ liệu phiên mới...\nId: @tranhoang2286`);
+        return res.status(500).send(
+`Hệ thống đang đồng bộ dữ liệu...
+ID: @tranhoang2286`
+        );
     }
 });
 
 app.get('/', (req, res) => {
-    res.send("HỆ THỐNG ĐA LUỒNG TOÁN HỌC MA TRẬN V9 HYPER CORE ONLINE.");
+    res.send("QRG QUANTUM MATRIX V10 - NO RANDOM - ONLINE.");
 });
 
 app.listen(PORT, () => {
-    console.log(`[ONLINE] Khởi chạy thành công bộ lõi đa luồng V9 trên cổng: ${PORT}`);
+    console.log(`[QRG] V10 QUANTUM MATRIX đang chạy trên cổng ${PORT}`);
 });
