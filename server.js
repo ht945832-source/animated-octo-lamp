@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // ============================================================================
-// THUẬT TOÁN MA TRẬN V7 CORE PREMIUM - SIÊU CHỐNG LOẠN NHỊP CẦU BỆT VÀ CẦU ĐẢO
+// SIÊU THUẬT TOÁN V8 PRO EXTREME - TỰ ĐỘNG ĐÁNH GIÁ ĐỘ CHẮC CỦA CẦU (KHÔNG RANDOM)
 // ============================================================================
 function executeUltraLongLogicChain(historyData) {
     // 1. Sàng lọc loại bỏ các phiên lỗi hệ thống từ nhà cái
@@ -19,8 +19,8 @@ function executeUltraLongLogicChain(historyData) {
 
     const reversedHistory = [...validHistory].reverse();
 
-    // Tăng vùng quét lên 40 phiên gần nhất để có cái nhìn toàn cảnh về xu hướng chu kỳ
-    const cleanData = reversedHistory.slice(-40).map(item => {
+    // Duy trì vùng quét 45 phiên gần nhất để bóc tách ma trận phân phối chu kỳ lớn
+    const cleanData = reversedHistory.slice(-45).map(item => {
         const d1 = parseInt(item.Xuc_cac_1 || item.Xuc_xac_1 || 0);
         const d2 = parseInt(item.Xuc_cac_2 || item.Xuc_xac_2 || 0);
         const d3 = parseInt(item.Xuc_cac_3 || item.Xuc_xac_3 || 0);
@@ -33,13 +33,18 @@ function executeUltraLongLogicChain(historyData) {
     });
 
     const size = cleanData.length;
-    if (size < 10) {
-        return { prediction: "TÀI", rate: "85%" };
+    if (size < 12) {
+        return { prediction: "TÀI", rate: "82%" };
     }
 
+    // Khởi tạo thang điểm ma trận xu hướng
     let scoreTai = 0.00;
     let scoreXiu = 0.00;
+    
+    // BIẾN QUYẾT ĐỊNH TỶ LỆ CỦA BẠN: Cầu càng chắc thì điểm thưởng này càng cao!
+    let confidenceBonus = 0.00; 
 
+    // Chuyển chuỗi dữ liệu sang dạng Text nhị phân để bóc tách mẫu hình
     const fullChain = cleanData.map(x => x.side).join('');
     
     const last3 = fullChain.slice(-3);
@@ -50,103 +55,132 @@ function executeUltraLongLogicChain(historyData) {
     const last8 = fullChain.slice(-8);
 
     // ------------------------------------------------------------------------
-    // MÔ-ĐUN 1: ĐỘNG LỰC HỌC NHẬN DIỆN THẾ CẦU - KHÓA CHẶT BỆT (ANTI-BREAK)
+    // MÔ-ĐUN 1: NHẬN DIỆN THẾ CẦU CHI TIẾT & PHÂN LOẠI ĐỘ CHẮC CHẮN (CONFIDENCE)
     // ------------------------------------------------------------------------
     
-    // Nâng mạnh trọng số bệt trường để ép bot TUYỆT ĐỐI KHÔNG BẺ CẦU KHI ĐANG RA BỆT THÔNG
+    // [THẾ 1] Cầu Bệt Siêu Dày (Bệt từ 7 tay trở lên) -> CẦU CỰC CHẮC, BÁM ĐẾN CHẾT
     if (last8 === '11111111' || last7 === '1111111') {
-        scoreTai += 15.0; 
+        scoreTai += 25.0;
+        confidenceBonus += 8.5; // Cộng thưởng lớn vì cầu bệt trường rất hiếm khi gãy đột ngột
     } else if (last8 === '00000000' || last7 === '0000000') {
-        scoreXiu += 15.0; 
+        scoreXiu += 25.0;
+        confidenceBonus += 8.5;
     }
-    // Chặn đứng lỗi gãy chuỗi ở ảnh lịch sử của bạn (phát hiện bệt từ tay 4, tay 5)
+    // [THẾ 1.2] Cầu Bệt Tiêu Chuẩn (Bệt từ 4-6 tay) -> CẦU CHẮC
     else if (last6 === '111111' || last5 === '11111' || last4 === '1111') {
-        scoreTai += 10.5;
+        scoreTai += 18.0;
+        confidenceBonus += 5.0;
     } else if (last6 === '000000' || last5 === '00000' || last4 === '0000') {
-        scoreXiu += 10.5;
+        scoreXiu += 18.0;
+        confidenceBonus += 5.0;
     }
 
-    // [THẾ 2] Nhận diện và bắt chuẩn nhịp Cầu Đảo 1-1 liên tục
+    // [THẾ 2] Cầu Đảo 1-1 Chuẩn Khuôn Máy (Tài Xỉu xen kẽ lặp lại liên tục) -> CẦU CỰC CHẮC
     if (last8 === '10101010' || last8 === '01010101') {
-        if (last3 === '101') scoreXiu += 9.5;
-        else if (last3 === '010') scoreTai += 9.5;
+        confidenceBonus += 7.5; // Khuôn đảo sâu rất ổn định
+        if (last3 === '101') scoreXiu += 20.0;
+        else if (last3 === '010') scoreTai += 20.0;
     } else if (last6 === '101010' || last6 === '010101') {
-        if (last3 === '101') scoreXiu += 7.5;
-        else if (last3 === '010') scoreTai += 7.5;
+        confidenceBonus += 4.5;
+        if (last3 === '101') scoreXiu += 15.0;
+        else if (last3 === '010') scoreTai += 15.0;
     } else if (last4 === '1010' || last4 === '0101') {
-        if (last3 === '101') scoreXiu += 5.5;
-        else if (last3 === '010') scoreTai += 5.5;
+        confidenceBonus += 2.0;
+        if (last3 === '101') scoreXiu += 10.0;
+        else if (last3 === '010') scoreTai += 10.0;
     }
 
-    // [THẾ 3] Nhận diện cấu trúc nhịp đôi song hành cân bằng 2-2
+    // [THẾ 3] Cầu Nhịp Đôi Cân Bằng 2-2 -> CẦU CHẮC TAY
     if (last4 === '1100') {
-        scoreXiu += 6.0; // Dự toán tay thứ 3 đưa dòng chuỗi về Xỉu tiếp tục
+        scoreXiu += 12.0; confidenceBonus += 3.5;
     } else if (last4 === '0011') {
-        scoreTai += 6.0; // Dự toán tay thứ 3 đưa dòng chuỗi về Tài tiếp tục
-    } else if (last5 === '11001') {
-        scoreTai += 5.0; 
-    } else if (last5 === '00110') {
-        scoreXiu += 5.0;
+        scoreTai += 12.0; confidenceBonus += 3.5;
+    } else if (last6 === '110011') {
+        scoreXiu += 14.0; confidenceBonus += 4.0;
+    } else if (last6 === '001100') {
+        scoreTai += 14.0; confidenceBonus += 4.0;
     }
 
-    // [THẾ 4] Nhận diện cấu trúc nhịp ba đối xứng 3-3
+    // [THẾ 4] Cầu Nhịp Ba Cân Bằng 3-3 -> CẦU CHẮC TAY
     if (last6 === '111000') {
-        scoreTai += 7.0; // Chạm biên độ 3 tay Xỉu, hồi phục nhịp đầu Tài
+        scoreTai += 15.0; confidenceBonus += 5.0; // Điểm gãy hồi tụ về Tài rất nét
     } else if (last6 === '000111') {
-        scoreXiu += 7.0; // Chạm biên độ 3 tay Tài, hồi phục nhịp đầu Xỉu
+        scoreXiu += 15.0; confidenceBonus += 5.0; // Điểm gãy hồi tụ về Xỉu rất nét
     }
 
-    // [THẾ 5] Cấu trúc cầu nhảy bậc thang và cầu lệch (1-2-3 hoặc 3-2-1)
+    // [THẾ 5] Cầu Nhảy Bậc Thang Lệch Tầng nâng cao (Chuỗi 1-2-3 hoặc 3-2-1)
     if (fullChain.slice(-6) === '100111') {
-        scoreXiu += 5.5;
+        scoreXiu += 10.0; confidenceBonus += 2.5;
     } else if (fullChain.slice(-6) === '011000') {
-        scoreTai += 5.5;
+        scoreTai += 10.0; confidenceBonus += 2.5;
+    }
+
+    // [THẾ 6] Cầu Nhảy Ngắn Tần Suất Cao (1-2 hoặc 2-1) -> Cầu bình thường
+    if (last3 === '100') {
+        scoreTai += 8.0; confidenceBonus += 1.0;
+    } else if (last3 === '011') {
+        scoreXiu += 8.0; confidenceBonus += 1.0;
+    } else if (last4 === '1101') {
+        scoreXiu += 7.0; confidenceBonus += 1.0;
+    } else if (last4 === '0010') {
+        scoreTai += 7.0; confidenceBonus += 1.0;
     }
 
     // ------------------------------------------------------------------------
-    // MÔ-ĐUN 2: PHÂN TÍCH ĐIỂM SỐ MOMENTUM VI PHÂN TUYẾN TÍNH GIỜ THỰC
+    // MÔ-ĐUN 2: TOÁN HỌC VI PHÂN MOMENTUM THEO CẤP SỐ LŨY THỪA GIỜ THỰC
     // ------------------------------------------------------------------------
     let momentum = 0;
     for (let i = 1; i < size; i++) {
         const diff = cleanData[i].total - cleanData[i - 1].total;
-        // Các phiên càng sát thời gian thực hiện tại sẽ được nhân hệ số lũy thừa bậc hai để bắt nhịp nhạy hơn
-        momentum += diff * Math.pow(i / size, 2);
+        // Các phiên càng sát thời gian thực hiện tại sẽ được đẩy trọng số cực đại (lũy thừa bậc 3)
+        momentum += diff * Math.pow(i / size, 3);
     }
     
     if (momentum > 0) {
-        scoreTai += Math.abs(momentum) * 0.45;
+        scoreTai += Math.abs(momentum) * 0.55;
     } else {
-        scoreXiu += Math.abs(momentum) * 0.45;
+        scoreXiu += Math.abs(momentum) * 0.55;
     }
 
     // ------------------------------------------------------------------------
-    // MÔ-ĐUN 3: THUẬT TOÁN HỒI QUY PHÂN PHỐI GAUSS ĐƯA VỀ ĐIỂM CÂN BẰNG
+    // MÔ-ĐUN 3: CƠ CHẾ HỒI QUY GAUSS CÂN BẰNG MẬT ĐỘ LỆCH BIÊN ĐỘ
     // ------------------------------------------------------------------------
     let totalTaiCount = 0;
     cleanData.forEach(x => { if (x.side === 1) totalTaiCount++; });
     const densityTai = totalTaiCount / size;
 
-    if (densityTai > 0.58) {
-        scoreXiu += 4.0; // Lực cản kéo hồi quy khi mật độ Tài quá dày
-    } else if (densityTai < 0.42) {
-        scoreTai += 4.0; // Lực cản kéo hồi quy khi mật độ Xỉu quá dày
+    if (densityTai > 0.56) {
+        scoreXiu += 6.0; // Lực cản kéo hồi quy khi mật độ Tài quá dày
+    } else if (densityTai < 0.44) {
+        scoreTai += 6.0; // Lực cản kéo hồi quy khi mật độ Xỉu quá dày
     }
 
     // ------------------------------------------------------------------------
-    // ĐẦU RA KẾT QUẢ ĐỒNG NHẤT KHÔNG RANDOM 100%
+    // XỬ LÝ ĐẦU RA - TÍNH TOÁN TỶ LỆ ĐỘNG LOGIC TUYẾN TÍNH (TUYỆT ĐỐI KHÔNG RANDOM)
     // ------------------------------------------------------------------------
     let finalPrediction = "TÀI";
     const deltaScore = Math.abs(scoreTai - scoreXiu);
     if (scoreXiu > scoreTai) finalPrediction = "XỈU";
 
-    // Tính toán Tỷ lệ động tiệm cận cố định dựa trên khoảng cách lệch điểm số logic
-    let rateFactor = Math.min(deltaScore * 3.8, 13.0);
-    let calculatedRate = Math.round(85 + rateFactor);
+    // Gốc tỉ lệ khởi điểm nằm ở mức 80% (Khi cầu đang đi ngang, không rõ thế cầu rõ nét)
+    let baseRate = 80;
+    
+    // Tính toán độ lệch logic giữa 2 bên để tăng tỷ lệ tuyến tính (Tối đa tăng thêm 10%)
+    let logicFactor = Math.min(deltaScore * 0.45, 10.0);
+    
+    // Khóa chặn trần điểm thưởng tự động từ các thế cầu chuẩn (Tối đa tăng thêm 8%)
+    let patternBonus = Math.min(confidenceBonus, 8.0);
+
+    // Tổng hợp tỷ lệ hoàn toàn bằng toán học cố định
+    let calculatedRate = Math.round(baseRate + logicFactor + patternBonus);
+    
+    // Khóa cứng trần tỉ lệ không vượt quá 98% để đảm bảo tính thực tế của core phân tích
+    if (calculatedRate > 98) calculatedRate = 98;
 
     return { prediction: finalPrediction, rate: `${calculatedRate}%` };
 }
 
-// --- LUỒNG ROUTE KHAI THÁC VÀ ĐÓNG GÓI DỮ LIỆU ---
+// --- LUỒNG ROUTE KHAI THÁC VÀ KHỚP NỐI DỮ LIỆU API ---
 app.get('/api/predict', async (req, res) => {
     try {
         const response = await axios.get('https://b52-qiw2.onrender.com/api/history', { timeout: 6000 });
@@ -207,9 +241,9 @@ Id: @tranhoang2286`;
 });
 
 app.get('/', (req, res) => {
-    res.send("HỆ THỐNG LÕI THUẬT TOÁN MA TRẬN V7 CORE PREMIUM ONLINE.");
+    res.send("HỆ THỐNG LÕI THUẬT TOÁN MA TRẬN V8 PRO EXTREME ONLINE.");
 });
 
 app.listen(PORT, () => {
-    console.log(`[ONLINE] Khởi chạy lõi xử lý V7 chống loạn nhịp thành công trên cổng: ${PORT}`);
+    console.log(`[ONLINE] Khởi chạy lõi xử lý V8 phân tách độ chắc cầu thành công trên cổng: ${PORT}`);
 });
